@@ -1,0 +1,23 @@
+pcgmd file only fibrinogen 
+
+  2508 atoms 
+ 1856 bonds 
+ 1624 angles 
+ 5 atom-types 
+ 3 bond-types 
+ 1 angle-types 
+-1500.000000 xlo 
+  1500.000000  xhi 
+-1500.000000 ylo 
+  1500.000000  yhi 
+-1500.000000 zlo 
+  1500.000000  zhi 
+ 
+Masses 
+ 
+1  20005.000000 
+2  32500.000000 
+3  25000.000000 
+4  20000.000000 
+5  20000.000000 
+ 

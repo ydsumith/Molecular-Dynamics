@@ -1,0 +1,21 @@
+
+pair_coeff * * 0.23838 4
+pair_coeff 2 2 0.23838 2.5
+pair_coeff * 4 0 0
+pair_coeff 2 4 0.23838 2.5
+pair_coeff 3 4 0.23838 2.0
+pair_coeff 4 4 0.23838 8.0
+
+bond_coeff  1  1.064 5.75
+bond_coeff  2  0.01064 5.75
+bond_coeff  3  1.0 4.0
+
+angle_coeff 1 10.432 180
+
+pcgbond_coeff 3 4 10.0 4.5
+pcgpair_coeff 3 4 5.0 2.0
+pcg_val 3 4 1
+
+pcgbond_coeff 2 4 5.0 4.5
+pcgpair_coeff 2 4 5.0 2.0
+pcg_val 2 4 1
