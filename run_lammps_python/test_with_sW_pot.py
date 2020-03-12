@@ -1,6 +1,6 @@
 import numpy as np
 import subprocess
-
+import time
 
 def create_sw_file(m):
     fileID = open("run_data/force_mW.sw","w");
@@ -13,7 +13,15 @@ def create_batch_file():
     fileID = open("run_data/runme.bat","w");
     fileID.write("echo 0 > program_status.txt\n");
     fileID.write("lmp_serial -in film_run.in\n");
+    fileID.write("lmp_serial -in liquid_run.in\n");
+    fileID.write("lmp_serial -in vapor_run.in\n");
     fileID.write("echo 1 > program_status.txt\nexit\n");
+    fileID.close();
+    fileID = open("master.bat","w");
+    fileID.write("cd C:/Sumith_Projects/Python_codes/run_lammps_with_python/run_data\n");
+    fileID.write("start C:/Sumith_Projects/Python_codes/run_lammps_with_python/run_data/runme.bat\n");
+    fileID.close();
+    fileID = open("results/results.txt","w");
     fileID.close();
     
 def create_vapor_run_script(dt,Tref,equ_run,prod_run):
@@ -73,7 +81,6 @@ def create_liquid_run_script(dt,Tref,equ_run,prod_run):
     fileID.close();
     
 def create_film_run_script(dt,Tref,equ_run,prod_run):
-    print("Module for creating lammps run script");
     fileID = open("run_data/film_run.in","w");
     fileID.write("units real\n");
     fileID.write("boundary p p p\n");
@@ -103,17 +110,71 @@ def create_film_run_script(dt,Tref,equ_run,prod_run):
     fileID.close();
 
 def run_all_lammps():
-    cmd = 'call C:/Sumith_Projects/Python_codes/run_lammps_with_python/sssss.bat'
+    cmd = 'call C:/Sumith_Projects/Python_codes/run_lammps_with_python/master.bat'
     failure = subprocess.call(cmd, shell=True)
     if failure:
         print ('Execution of "%s" failed!\n' % cmd)
+    #---
+    print("Running the lammps programs, wait...");
+    waitforme = 0;
+    while waitforme < 1:
+        time.sleep(1.0);
+        with open("run_data/program_status.txt") as fileID:
+            for line in fileID:
+                temp = line.split(" ");
+                waitforme = int(temp[0]);
+    print("ran all lammps");
 
+def estimate_costs(prod_run):
+    #---film run results
+    with open("run_data/log_film.log") as fileID:
+        iteration = 0; ncuttan = 0; surf_tens = 0;
+        for line in fileID:
+            iteration += 1;
+            if iteration > 5 and iteration < prod_run:
+                ncuttan += 1;
+                temp = line.split();
+                surf_tens = surf_tens + float(temp[6]);
+        surf_tens = surf_tens / ncuttan;
+    #---vapor run results
+    with open("run_data/log_vapor.log") as fileID:
+        iteration = 0; ncuttan = 0; Hvap = 0;
+        for line in fileID:
+            iteration += 1;
+            if iteration > 5 and iteration < prod_run:
+                ncuttan += 1;
+                temp = line.split();
+                Hvap = Hvap + float(temp[7]);
+        Hvap = Hvap / ncuttan;
+    #---liquid run results
+    with open("run_data/log_liquid.log") as fileID:
+        iteration = 0; ncuttan = 0; Hliq = 0; density = 0;
+        for line in fileID:
+            iteration += 1;
+            if iteration > 5 and iteration < prod_run:
+                ncuttan += 1;
+                temp = line.split();
+                Hliq = Hliq + float(temp[7]);
+                density = density + float(temp[6]);
+        Hliq = Hliq / ncuttan;
+        density = 1000*density / ncuttan;
+    #--estimate cost value
+    ref_surf_tens = 58.91;
+    ref_density = 958.35;
+    ref_enthalpy = 9.7154982976;
+    dH = Hvap - Hliq;
+    curr_error = (density-ref_density)**2 + (surf_tens-ref_surf_tens)**2 + (dH - ref_enthalpy)**2;
+    fileID = open("results/results.txt","a");
+    fileID.write("Current Error: %.2f, Density = %f, Enthalpy = %f, Surf Tens = %f\n" % (curr_error,density,dH,surf_tens));
+    fileID.close();
+    return curr_error;
+        
 def main():
     print("main function");
-    dt = 10.0;
+    dt = 1.0;
     Tref = 373.15;
-    equ_run = 500; #50000;
-    prod_run = 500; #75000;
+    equ_run = 50; #50000;
+    prod_run = 50; #75000;
     parameters = [8.385138, 2.751924, 2.495835, 10.649491, 1.192579, -0.302891, 4.190227, 1.981567, 5.004732, 0.132740, 0.175862];
 
     create_batch_file();
@@ -123,6 +184,7 @@ def main():
     create_liquid_run_script(dt,Tref,equ_run,prod_run);
     create_vapor_run_script(dt,Tref,equ_run,prod_run);
     run_all_lammps();
+    curr_error = estimate_costs(prod_run);
     
     
 if __name__ == "__main__":
