@@ -21,11 +21,16 @@ def create_batch_file():
     fileID.write("mpiexec -np 4 lmp_mpi -in vapor_run.in\n");
     fileID.write("echo 1 > program_status.txt\nexit\n");
     fileID.close();
+    #---
     fileID = open("master.bat","w");
     fileID.write("cd C:/Users/Sumith.Yesudasan/PROJECTS/LAMMPSrun/for_paper_6/Automated_Nelder_mW/run_data\n");
     fileID.write("start C:/Users/Sumith.Yesudasan/PROJECTS/LAMMPSrun/for_paper_6/Automated_Nelder_mW/run_data/runme.bat\n");
     fileID.close();
+    #---
     fileID = open("results/results.txt","w");
+    fileID.close();
+    #---
+    fileID = open("results/parameters.txt","w");    
     fileID.close();
     
 def create_vapor_run_script(dt,Tref,equ_run,prod_run):
@@ -119,7 +124,7 @@ def run_all_lammps():
     if failure:
         print ('Execution of "%s" failed!\n' % cmd)
     #---
-    print("Running the lammps programs, wait...");
+    #print("Running the lammps programs, wait...");
     waitforme = 0;
     while waitforme < 1:
         time.sleep(1.0);
@@ -127,7 +132,7 @@ def run_all_lammps():
             for line in fileID:
                 temp = line.split(" ");
                 waitforme = int(temp[0]);
-    print("ran all lammps");
+    #print("ran all lammps");
 
 def estimate_costs(prod_run):
     #---film run results
@@ -201,11 +206,21 @@ def sort_mats(cost_mat,x_mat,n):
     x_mat = np.take_along_axis(x_mat, ind, axis=0);
     return cost_mat,x_mat;
 
+def write_parameters(x_mat,iteration,n):
+    fileID = open("results/parameters.txt","a");  
+    fileID.write("\nCurrent iteration = %d\n" % (iteration));
+    for i in range(n+1):
+        for j in range(n):
+            fileID.write("%.4f " % (x_mat[i][j]));
+        fileID.write("\n");
+    fileID.close();
+
+
 def main():
     start_time = time.time()
-    n = 11; dh = 0.1;    
+    n = 11; dh = 0.25;    
     alpha = 1.0; gamma = 2.0; rho = 0.5; sigma = 0.5;
-    term_tol = 1e-15; MAX_ITER = 3; cur_iter = 0;
+    term_tol = 1e-10; MAX_ITER = 200; cur_iter = 0;
     stddev = 1000; # initial val
 
     cost_mat = np.zeros((n+1,1));
@@ -213,8 +228,8 @@ def main():
 
     dt = 1.0;
     Tref = 373.15;
-    equ_run = 50; #50000;
-    prod_run = 50; #75000;
+    equ_run = 50000;
+    prod_run = 75000;
     x = [8.385138, 2.751924, 2.495835, 10.649491, 1.192579, -0.302891, 4.190227, 1.981567, 5.004732, 0.132740, 0.175862];
 
     create_batch_file();
@@ -227,6 +242,7 @@ def main():
         
     while stddev > term_tol and cur_iter < MAX_ITER: # termination criteria
         print("Current iteration = ", cur_iter);
+        write_parameters(x_mat,cur_iter,n);
         # sorting
         (cost_mat,x_mat) = sort_mats(cost_mat,x_mat,n);
         stddev = np.std(cost_mat);        
