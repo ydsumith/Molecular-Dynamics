@@ -16,9 +16,9 @@ def create_sw_file(m):
 def create_batch_file():
     fileID = open("run_data/runme.bat","w");
     fileID.write("echo 0 > program_status.txt\n");
-    fileID.write("mpiexec -np 4 lmp_mpi -in film_run.in\n");
+    fileID.write("mpiexec -np 6 lmp_mpi -in film_run.in\n");
     fileID.write("mpiexec -np 6 lmp_mpi -in liquid_run.in\n");
-    fileID.write("mpiexec -np 4 lmp_mpi -in vapor_run.in\n");
+    fileID.write("mpiexec -np 2 lmp_mpi -in vapor_run.in\n");
     fileID.write("echo 1 > program_status.txt\nexit\n");
     fileID.close();
     #---
@@ -168,23 +168,33 @@ def estimate_costs(prod_run):
         Hliq = Hliq / ncuttan;
         density = 1000*density / ncuttan;
     #--estimate cost value
-    ref_surf_tens = 58.91;
-    ref_density = 958.35;
-    ref_enthalpy = 9.7154982976;
+    ref_surf_tens = 58.91;    ref_density = 958.35;    ref_enthalpy = 9.7154982976;
     dH = Hvap - Hliq;
-    curr_error = (density-ref_density)**2 + (surf_tens-ref_surf_tens)**2 + (dH - ref_enthalpy)**2;
+    surf_error = math.sqrt(((surf_tens-ref_surf_tens)**2)/(ref_surf_tens**2));
+    dens_error = math.sqrt(((density-ref_density)**2)/(ref_density**2));
+    enth_error = math.sqrt(((dH - ref_enthalpy)**2)/(ref_enthalpy**2));
+    #--weights for each error will be assigned
+    curr_error = 0.30*dens_error + 0.10*surf_error + 0.60*enth_error;
+    curr_error = curr_error *100;
     fileID = open("results/results.txt","a");
     fileID.write("Current Error: %.2f, Density = %f, Enthalpy = %f, Surf Tens = %f\n" % (curr_error,density,dH,surf_tens));
     fileID.close();
     return curr_error;
    
     
-def cost_estimate(x,n,dt,Tref,equ_run,prod_run):
+def cost_estimate(x,n,dt,Tref,equ_run,prod_run,typee):
     create_sw_file(x);
     create_film_run_script(dt,Tref,equ_run,prod_run);
     create_liquid_run_script(dt,Tref,equ_run,prod_run);
     create_vapor_run_script(dt,Tref,equ_run,prod_run);
     run_all_lammps();
+    fileID = open("results/results.txt","a");
+    if typee == 1:  fileID.write("Initial simplex:\n");
+    if typee == 2:  fileID.write("Reflection:\n");
+    if typee == 3:  fileID.write("Expansion:\n");
+    if typee == 4:  fileID.write("Contraction:\n");
+    if typee == 5:  fileID.write("Shrink:\n");
+    fileID.close();
     curr_error = estimate_costs(prod_run);
     return curr_error;
 
@@ -195,7 +205,7 @@ def create_initial_simplex(x,n,dh):
     for j in range(1,n+1): # row navigation
         for i in range(n): # column nav
             if i == j-1:
-                x_mat[j][i] = x[i] + dh;
+                x_mat[j][i] = x[i] * dh;
             else:
                 x_mat[j][i] = x[i];
     return x_mat
@@ -206,31 +216,30 @@ def sort_mats(cost_mat,x_mat,n):
     x_mat = np.take_along_axis(x_mat, ind, axis=0);
     return cost_mat,x_mat;
 
-def write_parameters(x_mat,iteration,n):
+def write_parameters(x_mat,iteration,n,cur_cost):
     fileID = open("results/parameters.txt","a");  
-    fileID.write("\nCurrent iteration = %d\n" % (iteration));
-    for i in range(n+1):
-        for j in range(n):
-            fileID.write("%.4f " % (x_mat[i][j]));
-        fileID.write("\n");
+    fileID.write("\nCurrent iteration = %d, cost = %.3f,  writing best parameters below\n" % (iteration,cur_cost));
+    for j in range(n):
+        fileID.write("%.6f " % (x_mat[0][j]));
+    fileID.write("\n");
     fileID.close();
 
 
 def main():
     start_time = time.time()
-    n = 11; dh = 0.25;    
+    n = 11; dh = 1.5; # 50 %
     alpha = 1.0; gamma = 2.0; rho = 0.5; sigma = 0.5;
-    term_tol = 1e-10; MAX_ITER = 200; cur_iter = 0;
+    term_tol = 1e-4; MAX_ITER = 200; cur_iter = 0;
     stddev = 1000; # initial val
 
     cost_mat = np.zeros((n+1,1));
     x_0 = np.zeros((n,1));
 
-    dt = 1.0;
+    dt = 5.0;
     Tref = 373.15;
-    equ_run = 50000;
-    prod_run = 75000;
-    x = [8.385138, 2.751924, 2.495835, 10.649491, 1.192579, -0.302891, 4.190227, 1.981567, 5.004732, 0.132740, 0.175862];
+    equ_run = 25000;
+    prod_run = 25000;
+    x = [8.412576, 2.743976, 2.442725, 10.653902, 1.225309, -0.240518, 4.334005, 1.990876, 5.006381, 0.192317, 0.207676];
 
     create_batch_file();
     
@@ -238,20 +247,20 @@ def main():
     x_mat = create_initial_simplex(x,n,dh);
     print("Here is the initial simplex\n",x_mat);
     for i in range(n+1): # from x_i to x_n+1
-        cost_mat[i] = cost_estimate(x_mat[i][:],n,dt,Tref,equ_run,prod_run);
+        cost_mat[i] = cost_estimate(x_mat[i][:],n,dt,Tref,equ_run,prod_run,1);
         
     while stddev > term_tol and cur_iter < MAX_ITER: # termination criteria
         print("Current iteration = ", cur_iter);
-        write_parameters(x_mat,cur_iter,n);
         # sorting
         (cost_mat,x_mat) = sort_mats(cost_mat,x_mat,n);
+        write_parameters(x_mat,cur_iter,n,cost_mat[0]);
         stddev = np.std(cost_mat);        
         # step 2: centroid
         x_0 = np.sum(x_mat[0:n][:],axis=0)/n;
         # step 3: reflection
         x_n1 = x_mat[n][:]; # x_(n+1)
         x_r = x_0 + alpha*(x_0-x_n1);
-        cost_r = cost_estimate(x_r,n,dt,Tref,equ_run,prod_run);
+        cost_r = cost_estimate(x_r,n,dt,Tref,equ_run,prod_run,2);
         if cost_mat[0] <= cost_r and cost_r < cost_mat[n]:
             x_mat[n][:] = x_r; # Obtaining a new simplex
             cost_mat[n] = cost_r;
@@ -259,7 +268,7 @@ def main():
             # step 4: Expansion
             if cost_r < cost_mat[0]:
                 x_e = x_0 + gamma*(x_r - x_0);
-                cost_e = cost_estimate(x_e,n,dt,Tref,equ_run,prod_run);
+                cost_e = cost_estimate(x_e,n,dt,Tref,equ_run,prod_run,3);
                 if cost_e < cost_r:
                     x_mat[n][:] = x_e; # Obtaining a new simplex
                     cost_mat[n] = cost_e;
@@ -273,7 +282,7 @@ def main():
             #step 5 Contraction
             else: 
                 x_c = x_0 + rho*(x_mat[n][:] - x_0);
-                cost_c = cost_estimate(x_c,n,dt,Tref,equ_run,prod_run);
+                cost_c = cost_estimate(x_c,n,dt,Tref,equ_run,prod_run,4);
                 if cost_c < cost_mat[n]:
                     x_mat[n][:] = x_c;  # Obtaining a new simplex
                     cost_mat[n] = cost_c;
@@ -283,7 +292,7 @@ def main():
                 else:
                     for i in range(1,n+1): # from x_2 to x_n+1
                         x_mat[i][:] = x_mat[0][:] + sigma*(x_mat[i][:] - x_mat[0][:]);
-                        cost_mat[i] = cost_estimate(x_mat[i][:],n,dt,Tref,equ_run,prod_run);
+                        cost_mat[i] = cost_estimate(x_mat[i][:],n,dt,Tref,equ_run,prod_run,5);
         cur_iter += 1;
     # while ends here, terminate the whole business
     print("\nTerminating..\nstddev = ",stddev,", tolerance = ",term_tol);
