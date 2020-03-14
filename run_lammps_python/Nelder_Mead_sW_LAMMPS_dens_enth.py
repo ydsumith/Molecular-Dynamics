@@ -16,8 +16,14 @@ def create_sw_file(m):
 def create_batch_file():
     fileID = open("run_data/runme.bat","w");
     fileID.write("echo 0 > program_status.txt\n");
-    fileID.write("mpiexec -np 6 lmp_mpi -in liquid_run.in\n");
-    fileID.write("mpiexec -np 2 lmp_mpi -in vapor_run.in\n");
+    fileID.write("mpiexec -np 6 lmp_mpi -in liquid_run_273.in\n");
+    fileID.write("mpiexec -np 6 lmp_mpi -in liquid_run_323.in\n");
+    fileID.write("mpiexec -np 6 lmp_mpi -in liquid_run_373.in\n");
+    fileID.write("mpiexec -np 6 lmp_mpi -in liquid_run_423.in\n");
+    fileID.write("mpiexec -np 2 lmp_mpi -in vapor_run_273.in\n");
+    fileID.write("mpiexec -np 2 lmp_mpi -in vapor_run_323.in\n");
+    fileID.write("mpiexec -np 2 lmp_mpi -in vapor_run_373.in\n");
+    fileID.write("mpiexec -np 2 lmp_mpi -in vapor_run_423.in\n");
     fileID.write("echo 1 > program_status.txt\nexit\n");
     fileID.close();
     #---
@@ -33,7 +39,8 @@ def create_batch_file():
     fileID.close();
     
 def create_vapor_run_script(dt,Tref,equ_run,prod_run):
-    fileID = open("run_data/vapor_run.in","w");
+    file_to_open = "run_data/vapor_run_" + str(round(Tref)) + ".in";
+    fileID = open(file_to_open,"w");
     fileID.write("units real\n");
     fileID.write("boundary p p p\n");
     fileID.write("atom_style atomic\n\n");
@@ -56,12 +63,13 @@ def create_vapor_run_script(dt,Tref,equ_run,prod_run):
     fileID.write("\nthermo 1\n");
     fileID.write("thermo_style custom step temp ke pe etotal press density enthalpy\n");
     fileID.write("thermo_modify norm yes flush yes temp thermo_temp press thermo_press\n");
-    fileID.write("\nlog log_vapor.log\n");
+    fileID.write("\nlog log_vapor_%d.log\n" % round(Tref));
     fileID.write("\nrun %d\n" % prod_run);
     fileID.close();
     
 def create_liquid_run_script(dt,Tref,equ_run,prod_run):
-    fileID = open("run_data/liquid_run.in","w");
+    file_to_open = "run_data/liquid_run_" + str(round(Tref)) + ".in";
+    fileID = open(file_to_open,"w");
     fileID.write("units real\n");
     fileID.write("boundary p p p\n");
     fileID.write("atom_style atomic\n\n");
@@ -84,7 +92,7 @@ def create_liquid_run_script(dt,Tref,equ_run,prod_run):
     fileID.write("\nthermo 1\n");
     fileID.write("thermo_style custom step temp ke pe etotal press density enthalpy\n");
     fileID.write("thermo_modify norm yes flush yes temp thermo_temp press thermo_press\n");
-    fileID.write("\nlog log_liquid.log\n");
+    fileID.write("\nlog log_liquid_%d.log\n" % round(Tref));
     fileID.write("\nrun %d\n" % prod_run);
     fileID.close();
 
@@ -105,9 +113,9 @@ def run_all_lammps():
                 waitforme = int(temp[0]);
     #print("ran all lammps");
 
-def estimate_costs(prod_run):
-    #---vapor run results
-    with open("run_data/log_vapor.log") as fileID:
+def vapor_loger(T,prod_run):
+    file_to_open = "run_data/log_vapor_" + str(round(T)) + ".log";
+    with open(file_to_open) as fileID:
         iteration = 0; ncuttan = 0; Hvap = 0;
         for line in fileID:
             iteration += 1;
@@ -116,8 +124,11 @@ def estimate_costs(prod_run):
                 temp = line.split();
                 Hvap = Hvap + float(temp[7]);
         Hvap = Hvap / ncuttan;
-    #---liquid run results
-    with open("run_data/log_liquid.log") as fileID:
+    return Hvap;
+
+def liquid_loger(T,prod_run):
+    file_to_open = "run_data/log_liquid_" + str(round(T)) + ".log";
+    with open(file_to_open) as fileID:
         iteration = 0; ncuttan = 0; Hliq = 0; density = 0;
         for line in fileID:
             iteration += 1;
@@ -128,24 +139,40 @@ def estimate_costs(prod_run):
                 density = density + float(temp[6]);
         Hliq = Hliq / ncuttan;
         density = 1000*density / ncuttan;
+    return Hliq, density;
+    
+def estimate_costs(prod_run,T):
+    Hvap = np.zeros((4,1));
+    Hliq = np.zeros((4,1));
+    density = np.zeros((4,1));
+    for i in range(4):
+        Hvap[i] = vapor_loger(T[i],prod_run);
+        Hliq[i], density[i] = liquid_loger(T[i],prod_run);
     #--estimate cost value
-    ref_density = 958.35;    ref_enthalpy = 9.7154982976;
+    ref_density = [999.79, 987.99, 958.35, 917];
+    ref_enthalpy = [10.768, 10.256, 9.715, 9.101];
     dH = Hvap - Hliq;
-    dens_error = math.sqrt(((density-ref_density)**2)/(ref_density**2));
-    enth_error = math.sqrt(((dH - ref_enthalpy)**2)/(ref_enthalpy**2));
+    dens_error = 0; enth_error = 0;
+    for i in range(4):
+        dens_error = dens_error + math.sqrt(((density[i]-ref_density[i])**2)/(ref_density[i]**2));
+        enth_error = enth_error + math.sqrt(((dH[i] - ref_enthalpy[i])**2)/(ref_enthalpy[i]**2));
     #--weights for each error will be assigned
-    curr_error = 0.30*dens_error + 0.60*enth_error;
+    curr_error = 0.50*dens_error + 0.50*enth_error;
     curr_error = curr_error *100;
     fileID = open("results/results.txt","a");
-    fileID.write("Current Error: %.2f, Density = %f, Enthalpy = %f\n" % (curr_error,density,dH));
+    fileID.write("\nCurrent Error: %.2f\n" % (curr_error));
+    for i in range(4):
+        fileID.write("T = %.2f, Density = %.2f, Enthalpy = %.2f\n" % (T[i],density[i],dH[i]));
     fileID.close();
     return curr_error;
    
     
-def cost_estimate(x,n,dt,Tref,equ_run,prod_run,typee):
+def cost_estimate(x,n,dt,equ_run,prod_run,typee,T):
     create_sw_file(x);
-    create_liquid_run_script(dt,Tref,equ_run,prod_run);
-    create_vapor_run_script(dt,Tref,equ_run,prod_run);
+    for Tref in T:
+        create_liquid_run_script(dt,Tref,equ_run,prod_run);
+        create_vapor_run_script(dt,Tref,equ_run,prod_run);
+    
     run_all_lammps();
     fileID = open("results/results.txt","a");
     if typee == 1:  fileID.write("Initial simplex:\n");
@@ -154,7 +181,7 @@ def cost_estimate(x,n,dt,Tref,equ_run,prod_run,typee):
     if typee == 4:  fileID.write("Contraction:\n");
     if typee == 5:  fileID.write("Shrink:\n");
     fileID.close();
-    curr_error = estimate_costs(prod_run);
+    curr_error = estimate_costs(prod_run,T);
     return curr_error;
 
 def create_initial_simplex(x,n,dh):
@@ -190,12 +217,12 @@ def main():
     alpha = 1.0; gamma = 2.0; rho = 0.5; sigma = 0.5;
     term_tol = 1e-4; MAX_ITER = 200; cur_iter = 0;
     stddev = 1000; # initial val
+    T = [273.15,323.15, 373.15, 423.15];
 
     cost_mat = np.zeros((n+1,1));
     x_0 = np.zeros((n,1));
 
     dt = 5.0;
-    Tref = 373.15;
     equ_run = 50; #25000;
     prod_run = 50; #25000;
     x = [8.412576, 2.743976, 2.442725, 10.653902, 1.225309, -0.240518, 4.334005, 1.990876, 5.006381, 0.192317, 0.207676];
@@ -206,7 +233,7 @@ def main():
     x_mat = create_initial_simplex(x,n,dh);
     print("Here is the initial simplex\n",x_mat);
     for i in range(n+1): # from x_i to x_n+1
-        cost_mat[i] = cost_estimate(x_mat[i][:],n,dt,Tref,equ_run,prod_run,1);
+        cost_mat[i] = cost_estimate(x_mat[i][:],n,dt,equ_run,prod_run,1,T);
         
     while stddev > term_tol and cur_iter < MAX_ITER: # termination criteria
         print("Current iteration = ", cur_iter);
@@ -219,7 +246,7 @@ def main():
         # step 3: reflection
         x_n1 = x_mat[n][:]; # x_(n+1)
         x_r = x_0 + alpha*(x_0-x_n1);
-        cost_r = cost_estimate(x_r,n,dt,Tref,equ_run,prod_run,2);
+        cost_r = cost_estimate(x_r,n,dt,equ_run,prod_run,2,T);
         if cost_mat[0] <= cost_r and cost_r < cost_mat[n]:
             x_mat[n][:] = x_r; # Obtaining a new simplex
             cost_mat[n] = cost_r;
@@ -227,7 +254,7 @@ def main():
             # step 4: Expansion
             if cost_r < cost_mat[0]:
                 x_e = x_0 + gamma*(x_r - x_0);
-                cost_e = cost_estimate(x_e,n,dt,Tref,equ_run,prod_run,3);
+                cost_e = cost_estimate(x_e,n,dt,equ_run,prod_run,3,T);
                 if cost_e < cost_r:
                     x_mat[n][:] = x_e; # Obtaining a new simplex
                     cost_mat[n] = cost_e;
@@ -241,7 +268,7 @@ def main():
             #step 5 Contraction
             else: 
                 x_c = x_0 + rho*(x_mat[n][:] - x_0);
-                cost_c = cost_estimate(x_c,n,dt,Tref,equ_run,prod_run,4);
+                cost_c = cost_estimate(x_c,n,dt,equ_run,prod_run,4,T);
                 if cost_c < cost_mat[n]:
                     x_mat[n][:] = x_c;  # Obtaining a new simplex
                     cost_mat[n] = cost_c;
@@ -251,7 +278,7 @@ def main():
                 else:
                     for i in range(1,n+1): # from x_2 to x_n+1
                         x_mat[i][:] = x_mat[0][:] + sigma*(x_mat[i][:] - x_mat[0][:]);
-                        cost_mat[i] = cost_estimate(x_mat[i][:],n,dt,Tref,equ_run,prod_run,5);
+                        cost_mat[i] = cost_estimate(x_mat[i][:],n,dt,equ_run,prod_run,5,T);
         cur_iter += 1;
     # while ends here, terminate the whole business
     print("\nTerminating..\nstddev = ",stddev,", tolerance = ",term_tol);
