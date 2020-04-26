@@ -1,0 +1,86 @@
+log res_0misc.log 
+
+units real
+dimension 3
+atom_style atomic
+boundary p p p
+
+pair_style hybrid sw lj/cut 12.0
+
+variable epsi equal 0.08
+variable N equal 5000
+variable equbrn1 equal 1
+variable runtime equal 1
+variable PITVL equal 100
+variable T1 equal 298
+
+variable den equal 1000 #kg/m3
+variable L2 equal 5000 # Ang
+variable B2 equal 25 # Ang
+variable ZW	equal 50 # Ang
+variable shift equal 5.0
+
+variable NAVO equal 6.02214076e+23
+variable massw equal "18.015*4" # g/mol
+variable masswa equal "v_massw/v_NAVO" # g/bead
+variable dens equal "1000*v_den/1e+30" # g/Ang^3
+variable VVOL equal "8 * v_L2 * v_B2 * v_ZW"
+variable U equal "round(v_dens * v_VVOL / v_masswa)"
+variable W_LO equal v_shift
+variable W_HI equal "v_shift + v_ZW + 10.0" # 10 is for cushion
+
+
+print "N Water = $U"
+
+lattice fcc 4.5
+region plat block -${L2} ${L2} -${B2} ${B2} 0 1.0 units box
+region water block -${L2} ${L2} -${B2} ${B2} ${W_LO} ${W_HI} units box
+region system block -${L2} ${L2} -${B2} ${B2} 0 200.0 units box
+
+create_box 2 system
+
+create_atoms 2 region plat
+create_atoms 1 random ${U} 2454584 water
+
+mass 1 72.06112
+mass 2 10.0
+
+group wat type 1
+group pla type 2
+
+pair_coeff * * sw force_mW.sw mW NULL
+pair_coeff 2 2 lj/cut 0.0 0.0
+pair_coeff 1 2 lj/cut ${epsi} 4.7
+
+timestep 5.0
+neighbor 2.0 bin
+neigh_modify delay 0 every 1
+
+fix 1 wat nvt temp ${T1} ${T1} 500
+fix 3 pla setforce 0.0 0.0 0.0
+fix 4 all momentum 5 linear 1 1 0
+
+thermo ${PITVL}
+thermo_style custom step temp etotal pe ke
+thermo_modify flush yes norm yes
+
+write_data data1_${epsi}.data
+
+minimize 1.0e-2 1.0e-4 10 50
+
+velocity all create ${T1} 4928459 rot yes dist gaussian
+run 0                             # temperature may not be 300K
+velocity all scale ${T1}         # now it should be
+
+reset_timestep 0
+run ${equbrn1}
+
+log res_${epsi}_main.txt
+reset_timestep 0
+
+dump 1 all xyz 100 dump_${epsi}.xyz
+dump 3 all xyz 1000 short_dump_${epsi}.xyz
+
+run ${runtime}
+
+write_data data2_${epsi}.data
