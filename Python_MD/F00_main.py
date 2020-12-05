@@ -40,7 +40,7 @@ for STEP_VAL in range(1,init.TOT_STEPS):
     if(STEP_VAL % init.PRESS_INTVL == 0): out.WRITE_VIRIAL(virial,kinetic,box_VOL,STEP_VAL)
     E_TOTAL = EWW + EWPT
     out.WRITE_RES(KE,E_TOTAL,T_BULK,STEP_VAL)
-    print "Exec =",float(STEP_VAL)*100/init.TOT_STEPS," %,PE = ", EWW, "T = ",T_BULK
+    print ("Exec =",float(STEP_VAL)*100/init.TOT_STEPS," %,PE = ", EWW, "T = ",T_BULK)
     if(STEP_VAL % init.nstxout == 0):  out.WRITE_XYZ(STEP_VAL)
 #End of main time stepping
-print "Program completed"
+print ("Program completed")
