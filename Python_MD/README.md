@@ -1,4 +1,4 @@
-# Classical Molecular Dynamics code in Python 2.7.xx
+# Classical Molecular Dynamics code in Python 3.9.0
 simple and basic python code for Molecular Dynamics for beginners
 
 Author Sumith YD
