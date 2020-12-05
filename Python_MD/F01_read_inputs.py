@@ -67,12 +67,12 @@ def read_inputs():
                     global TAU
                     TAU = float(varvalue)
                 else:
-                    print "[ERROR 100]: Input file read error"
-                    print "parameter no found: ",vartype
+                    print ("[ERROR 100]: Input file read error")
+                    print ("parameter no found: ",vartype)
             #end of if ";"
         #end of for loop
         if NST_COMM == 0: NST_COMM = TOT_STEPS
-        print "File read successfully.."
+        print ("File read successfully..")
         
 def allot_memory(ARG):
     global ACCEL, FORCE #, VELO
@@ -106,7 +106,7 @@ def read_argon():
         box_L = float(data[-1][0])
         box_B = float(data[-1][1])
         box_H = float(data[-1][2])
-        print "Read argon successfully"
+        print ("Read argon successfully")
         allot_memory(NARGON)
-        print "Allotted initial memory"
+        print ("Allotted initial memory")
         #print data
