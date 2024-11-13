@@ -1,0 +1,65 @@
+# Set units to metal and boundary conditions
+units        metal
+boundary     p p p
+atom_style   atomic
+
+# Read initial data from file
+read_data water.data
+
+# Define masses for atom types
+mass 1 18.01468
+
+# Define pair styles and coefficients
+pair_style tersoff
+pair_coeff * * Wa.tersoff Wa
+
+# Set neighbor list parameters
+neighbor 5 bin
+neigh_modify every 1 delay 0 check yes
+
+# Define groups for water and copper atoms
+group gwater type 1
+
+# Define variables for equilibration and production runs
+variable equilibrationSteps equal 100000      # Number of timesteps for equilibration
+variable productionSteps equal 250000         # Number of timesteps for production run
+variable aveEvery equal 5                    # Average every 5 timesteps
+variable aveRepeat equal 10000               # Number of repeats for averaging
+variable aveFreq equal 50000                 # Frequency to write averaged data to file
+
+# Set thermo output and timestep
+thermo 25
+thermo_style multi
+thermo_modify norm yes flush yes
+timestep 0.010
+
+fix tempf gwater nvt temp ${Tref} ${Tref} 0.5
+
+# Equilibration run
+log equilibration_${Tref}.log
+run ${equilibrationSteps} 
+write_data output_equil_${Tref}.data nocoeff nofix
+
+# Define chunk for averaging along z-axis
+compute my1dChunks gwater chunk/atom bin/1d z lower 1 units box pbc yes
+
+# Compute per-atom kinetic and potential energy
+compute keAtom gwater ke/atom
+compute peAtom gwater pe/atom
+
+# Compute per-chunk pressure
+compute pressurePerChunk gwater stress/atom NULL
+fix pressProfile all ave/chunk ${aveEvery} ${aveRepeat} ${aveFreq} my1dChunks c_pressurePerChunk[1] c_pressurePerChunk[2] c_pressurePerChunk[3] file pressure_profile_${Tref}.txt
+
+# Compute density per chunk
+fix densityProfile all ave/chunk ${aveEvery} ${aveRepeat} ${aveFreq} my1dChunks density/mass file density_profile_${Tref}.txt
+
+# Sum kinetic and potential energy per chunk
+fix keProfile all ave/chunk ${aveEvery} ${aveRepeat} ${aveFreq} my1dChunks c_keAtom file ke_profile_${Tref}.txt
+fix peProfile all ave/chunk ${aveEvery} ${aveRepeat} ${aveFreq} my1dChunks c_peAtom file pe_profile_${Tref}.txt
+
+# Production run
+log production_${Tref}.log
+thermo 10
+run ${productionSteps} 
+write_data output_prod_final_${Tref}.data nocoeff nofix
